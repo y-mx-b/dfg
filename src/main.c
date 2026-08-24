@@ -9,7 +9,7 @@
 #include <sys/errno.h>
 #include <sys/stat.h>
 
-#define USAGE "usage: dfg [-hfu] [-s <store-path>] [-r <root-path>] <profile|profile:link>..."
+#define USAGE "usage: dfg [-hdfu] [-s <store-path>] [-r <root-path>] <profile|profile:link>..."
 #define HELP \
 	"A dotfile configuration utility.\n" \
 	"\n" \
@@ -17,6 +17,7 @@
 	"\n" \
 	"options:\n" \
 	"    -h          Display usage information.\n" \
+	"    -d          Perform a dry run and print all actions insteaed of executing.\n" \
 	"    -f          Overwrite any existing files encountered.\n" \
 	"    -u          Unlink the given profiles instead of linking them.\n" \
 	"    -s          Path to the profile store. [default: $HOME/.dfg]\n" \
@@ -42,17 +43,21 @@ int main(int argc, char **argv) {
 	struct {
 		bool force;
 		bool unlink;
+		bool dry;
 		char store[PATH_MAX];
 		char root[PATH_MAX];
 	} option = { 0 };
 
 	opterr = 0;
 	int opt;
-	while ((opt = getopt(argc, argv, "hfus:r:")) != -1) {
+	while ((opt = getopt(argc, argv, "hdfus:r:")) != -1) {
 		switch (opt) {
 		case 'h':
 			printf(HELP);
 			exit(EXIT_SUCCESS);
+			break;
+		case 'd':
+			option.dry = true;
 			break;
 		case 'f':
 			option.force = true;
@@ -85,6 +90,7 @@ int main(int argc, char **argv) {
 	}
 
 	if (optind >= argc) {
+		// TODO: maybe just print help message instead?
 		fprintf(stderr, "error: expected arguments\n");
 		fprintf(stderr, "%s\n", USAGE);
 	}
@@ -92,7 +98,7 @@ int main(int argc, char **argv) {
 	if (option.root[0] == 0) {
 		strlcpy(option.root, home_dir(), PATH_MAX);
 	}
-	printf("root: %s\n", option.root);
+	if (option.dry) { printf("root: %s\n", option.root); }
 
 	if (option.store[0] == 0) {
 		char *dfg_store = getenv("DFG_STORE");
@@ -103,7 +109,7 @@ int main(int argc, char **argv) {
 			strlcat(option.store, "/.dfg", PATH_MAX);
 		}
 	}
-	printf("store: %s\n", option.store);
+	if (option.dry) { printf("store: %s\n", option.store); }
 
 	while (optind < argc) {
 		char *arg = argv[optind++];
@@ -165,7 +171,11 @@ int main(int argc, char **argv) {
 		// TODO: implement actual linking/unlinking
 		int err = 0;
 		if (option.unlink) {
-			printf("unlink: %s : %s\n", profile, link);
+			if (option.dry) {
+				printf("unlink: %s : %s\n", profile, link);
+				continue;
+			}
+
 			struct stat link_stat;
 			if ((err = lstat(link, &link_stat)) == 0) {
 				if (S_ISLNK(link_stat.st_mode)) {
@@ -175,11 +185,17 @@ int main(int argc, char **argv) {
 				}
 			}
 		} else {
-			printf("link: %s : %s\n", profile, link);
+			if (option.dry) {
+				printf("link: %s : %s\n", profile, link);
+				continue;
+			}
+
 			err = symlink(profile, link);
 			// TODO: implement -f flag for replacing existing file system entries
+			// TODO: check if profile exists, error if not
 		}
 
+		// TODO: extract functionality into separate functions that return error code + context
 		// TODO: implement error handling
 		if (err == 0) { continue; }
 		switch (errno) {
