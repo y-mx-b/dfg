@@ -11,12 +11,13 @@ by keeping them all contained within a single directory.
 ```
 A dotfile configuration utility.
 
-usage: dfg [-hfu] [-s <path>] <profile>|<profile:path>...
+usage: dfg [-hfu] [-s <path>] [-r <root-path>] <profile|profile:path>...
 
 options:
     -h          Display usage information.
     -f          Overwrite any existing files encountered.
     -u          Unlink the given profiles instead of linking them.
+    -r          Path to the root directory for links. [default: $HOME]\n
     -s          Path to the profile store. [default: $HOME/.dfg]
 ```
 

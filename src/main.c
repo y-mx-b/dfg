@@ -7,9 +7,7 @@
 #include <pwd.h>
 #include <string.h>
 
-// TODO: add `-r` option to specify root directory for link paths instead of using $HOME
-// ^ once this is done, use option.root instead of a random home variable
-#define USAGE "usage: dfg [-hfu] [-s <store-path>] <profile|profile:path>..."
+#define USAGE "usage: dfg [-hfu] [-s <store-path>] [-r <root-path>] <profile|profile:path>..."
 #define HELP \
 	"A dotfile configuration utility.\n" \
 	"\n" \
@@ -19,18 +17,36 @@
 	"    -h          Display usage information.\n" \
 	"    -f          Overwrite any existing files encountered.\n" \
 	"    -u          Unlink the given profiles instead of linking them.\n" \
-	"    -s          Path to the profile store. [default: $HOME/.dfg]\n"
+	"    -s          Path to the profile store. [default: $HOME/.dfg]\n" \
+	"    -r          Path to the root directory for links. [default: $HOME]\n"
+
+/// Return a lazily initialized static path to the user's home directory.'
+const char *home_dir() {
+	static char home[PATH_MAX] = { 0 };
+
+	if (home[0] == 0) {
+		char *home_ptr = getenv("HOME");
+		if (!home_ptr) {
+			struct passwd *pw = getpwuid(getuid());
+			home_ptr = pw->pw_dir;
+		}
+		strlcpy(home, home_ptr, PATH_MAX);
+	}
+
+	return home;
+}
 
 int main(int argc, char **argv) {
 	struct {
 		bool force;
 		bool unlink;
-		char *store;
+		char store[PATH_MAX];
+		char root[PATH_MAX];
 	} option = { 0 };
 
 	opterr = 0;
 	int opt;
-	while ((opt = getopt(argc, argv, "hfus:")) != -1) {
+	while ((opt = getopt(argc, argv, "hfus:r:")) != -1) {
 		switch (opt) {
 		case 'h':
 			printf(HELP);
@@ -43,11 +59,17 @@ int main(int argc, char **argv) {
 			option.unlink = true;
 			break;
 		case 's':
-			option.store = optarg;
+			strlcpy(option.store, optarg, PATH_MAX);
+			break;
+		case 'r':
+			strlcpy(option.root, optarg, PATH_MAX);
 			break;
 		case '?':
 			if (optopt == 's' && optarg == NULL) {
 				fprintf(stderr, "error: expected argument for option `-s`\n");
+				fprintf(stderr, "%s\n", USAGE);
+			} else if (optopt == 'r' && optarg == NULL) {
+				fprintf(stderr, "error: expected argument for option `-r`\n");
 				fprintf(stderr, "%s\n", USAGE);
 			} else {
 				fprintf(stderr, "error: unknown option `-%c`\n", optopt);
@@ -65,24 +87,22 @@ int main(int argc, char **argv) {
 		fprintf(stderr, "%s\n", USAGE);
 	}
 
-	char *home;
-	if (option.store == NULL) {
+	if (option.root[0] == 0) {
+		strlcpy(option.root, home_dir(), PATH_MAX);
+	}
+	printf("root: %s\n", option.root);
+
+	if (option.store[0] == 0) {
 		char *dfg_store = getenv("DFG_STORE");
 		if (dfg_store) {
-			option.store = dfg_store;
+			strlcpy(option.store, dfg_store, PATH_MAX);
 		} else {
-			char default_store[PATH_MAX] = { 0 };
-			home = getenv("HOME");
-			if (!home) {
-				struct passwd *pw = getpwuid(getuid());
-				home = pw->pw_dir;
-			}
-			strlcpy(default_store, home, PATH_MAX);
-			strlcat(default_store, "/.dfg", PATH_MAX);
-			option.store = default_store;
+			strlcpy(option.store, home_dir(), PATH_MAX);
+			strlcat(option.store, "/.dfg", PATH_MAX);
 		}
 		printf("use default store: %s\n", option.store);
 	}
+	printf("store: %s\n", option.store);
 
 	while (optind < argc) {
 		// TODO: handle ~ at the start of link path
@@ -97,7 +117,7 @@ int main(int argc, char **argv) {
 			profile[i-1] = '\0';
 			link_path = &profile[i];
 		} else {
-			strlcpy(link_buf, home, PATH_MAX);
+			strlcpy(link_buf, home_dir(), PATH_MAX);
 			strlcat(link_buf, "/", PATH_MAX);
 			strlcat(link_buf, profile, PATH_MAX);
 			link_path = link_buf;
