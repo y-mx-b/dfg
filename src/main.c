@@ -7,7 +7,7 @@
 #include <pwd.h>
 #include <string.h>
 
-#define USAGE "usage: dfg [-hfu] [-s <store-path>] [-r <root-path>] <profile|profile:path>..."
+#define USAGE "usage: dfg [-hfu] [-s <store-path>] [-r <root-path>] <profile|profile:link>..."
 #define HELP \
 	"A dotfile configuration utility.\n" \
 	"\n" \
@@ -100,34 +100,51 @@ int main(int argc, char **argv) {
 			strlcpy(option.store, home_dir(), PATH_MAX);
 			strlcat(option.store, "/.dfg", PATH_MAX);
 		}
-		printf("use default store: %s\n", option.store);
 	}
 	printf("store: %s\n", option.store);
 
 	while (optind < argc) {
-		// TODO: handle ~ at the start of link path
-		char *profile = argv[optind++];
-		char *link_path = 0;
-		char link_buf[PATH_MAX] = { 0 };
+		char *arg = argv[optind++];
+		char profile[PATH_MAX] = { 0 };
+		char link[PATH_MAX] = { 0 };
 
 		int i = 0;
 		char c;
-		while ((c = profile[i++]) != ':' && c != '\0');
-		if (c == ':') {
-			profile[i-1] = '\0';
-			link_path = &profile[i];
-		} else {
-			strlcpy(link_buf, home_dir(), PATH_MAX);
-			strlcat(link_buf, "/", PATH_MAX);
-			strlcat(link_buf, profile, PATH_MAX);
-			link_path = link_buf;
+		// search for colon separator
+		while ((c = arg[i++]) != ':' && c != '\0');
+		// if colon separator exists, overwrite colon with '\0' to split
+		// the string such at `arg` is the profile and `arg[i]` is the link
+		if (c == ':') { arg[i-1] = '\0'; }
+
+		// build profile path
+		if (snprintf(profile, PATH_MAX, "%s/%s", option.store, arg) >= PATH_MAX) {
+			fprintf(stderr, "error: profile path too long\n");
+			exit(EXIT_FAILURE);
+		}
+
+		// build link path
+		size_t n;
+		switch (c) {
+		case '/':
+			n = strlcpy(link, &arg[i], PATH_MAX);
+			break;
+		case '~':
+			n = snprintf(link, PATH_MAX, "%s/%s", home_dir(), &arg[i+2]);
+			break;
+		default:
+			n = snprintf(link, PATH_MAX, "%s/%s", option.root, arg);
+			break;
+		}
+		if (n >= PATH_MAX) {
+			fprintf(stderr, "error: link path too long\n");
+			exit(EXIT_FAILURE);
 		}
 
 		// TODO: implement actual linking/unlinking
 		if (option.unlink) {
-			printf("unlink: %s:%s\n", profile, link_path);
+			printf("unlink: %s : %s\n", profile, link);
 		} else {
-			printf("link: %s:%s\n", profile, link_path);
+			printf("link: %s : %s\n", profile, link);
 		}
 	}
 
