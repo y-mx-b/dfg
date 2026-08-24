@@ -2,6 +2,10 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <limits.h>
+#include <sys/types.h>
+#include <pwd.h>
+#include <string.h>
 
 #define USAGE "usage: dfg [-hfu] [-s <store-path>] <profile|profile:path>..."
 #define HELP \
@@ -60,8 +64,21 @@ int main(int argc, char **argv) {
 	}
 
 	if (option.store == NULL) {
-		// TODO
-		printf("use default store\n");
+		char *dfg_store = getenv("DFG_STORE");
+		if (dfg_store) {
+			option.store = dfg_store;
+		} else {
+			char default_store[PATH_MAX] = { 0 };
+			char *home = getenv("HOME");
+			if (!home) {
+				struct passwd *pw = getpwuid(getuid());
+				home = pw->pw_dir;
+			}
+			strlcpy(default_store, home, PATH_MAX);
+			strlcat(default_store, "/.dfg", PATH_MAX);
+			option.store = default_store;
+		}
+		printf("use default store: %s\n", option.store);
 	}
 
 	if (option.unlink) {
