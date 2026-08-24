@@ -113,35 +113,53 @@ int main(int argc, char **argv) {
 		int i = 0;
 		char c;
 		// search for colon separator
-		while ((c = arg[i++]) != ':' && c != '\0');
+		for (c = arg[i]; c != ':' && c != '\0'; c = arg[++i]);
 		// if colon separator exists, overwrite colon with '\0' to split
 		// the string such at `arg` is the profile and `arg[i]` is the link
-		if (c == ':') { arg[i-1] = '\0'; }
+		if (c == ':') { arg[i++] = '\0'; }
 
 		// build profile path
-		if (snprintf(profile, PATH_MAX, "%s/%s", option.store, arg) >= PATH_MAX) {
-			fprintf(stderr, "error: profile path too long\n");
-			exit(EXIT_FAILURE);
+		size_t n = 0;
+		switch (arg[0]) {
+		case '/':
+			n = strlcpy(profile, arg, PATH_MAX);
+			break;
+		case '~':
+			if (arg[1] == '/') {
+				n = snprintf(profile, PATH_MAX, "%s/%s", home_dir(), &arg[2]);
+				break;
+			}
+		default:
+			n = snprintf(profile, PATH_MAX, "%s/%s", option.store, arg);
+		}
+		if (n >= PATH_MAX) {
+			fprintf(stderr, "error: profile path too long, skipping (truncated profile path: \"%s\")\n", profile);
+			continue;
 		}
 
 		// TODO: check if profile is a symlink and error if it is
 
 		// build link path
-		size_t n;
-		switch (c) {
+		n = 0;
+		switch (arg[i]) {
+		case '\0':
+			n = snprintf(link, PATH_MAX, "%s/%s", option.root, arg);
+			break;
 		case '/':
 			n = strlcpy(link, &arg[i], PATH_MAX);
 			break;
 		case '~':
-			n = snprintf(link, PATH_MAX, "%s/%s", home_dir(), &arg[i+2]);
-			break;
+			if (arg[i+1] == '/') {
+				n = snprintf(link, PATH_MAX, "%s/%s", home_dir(), &arg[i+2]);
+				break;
+			}
 		default:
-			n = snprintf(link, PATH_MAX, "%s/%s", option.root, arg);
+			n = snprintf(link, PATH_MAX, "%s/%s", option.root, &arg[i]);
 			break;
 		}
 		if (n >= PATH_MAX) {
-			fprintf(stderr, "error: link path too long\n");
-			exit(EXIT_FAILURE);
+			fprintf(stderr, "error: link path too long, skipping (truncated link path: \"%s\")\n", link);
+			continue;
 		}
 
 		// TODO: implement actual linking/unlinking
