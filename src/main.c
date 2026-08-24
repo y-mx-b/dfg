@@ -6,6 +6,8 @@
 #include <sys/types.h>
 #include <pwd.h>
 #include <string.h>
+#include <sys/errno.h>
+#include <sys/stat.h>
 
 #define USAGE "usage: dfg [-hfu] [-s <store-path>] [-r <root-path>] <profile|profile:link>..."
 #define HELP \
@@ -122,6 +124,8 @@ int main(int argc, char **argv) {
 			exit(EXIT_FAILURE);
 		}
 
+		// TODO: check if profile is a symlink and error if it is
+
 		// build link path
 		size_t n;
 		switch (c) {
@@ -141,10 +145,27 @@ int main(int argc, char **argv) {
 		}
 
 		// TODO: implement actual linking/unlinking
+		int err = 0;
 		if (option.unlink) {
 			printf("unlink: %s : %s\n", profile, link);
+			struct stat link_stat;
+			if ((err = lstat(link, &link_stat)) == 0) {
+				if (S_ISLNK(link_stat.st_mode)) {
+					err = remove(link);
+				} else {
+					fprintf(stderr, "error: expected symlink at `%s`\n", link);
+				}
+			}
 		} else {
 			printf("link: %s : %s\n", profile, link);
+			err = symlink(profile, link);
+			// TODO: implement -f flag for replacing existing file system entries
+		}
+
+		// TODO: implement error handling
+		if (err == 0) { continue; }
+		switch (errno) {
+
 		}
 	}
 
