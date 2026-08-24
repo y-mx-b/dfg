@@ -42,13 +42,13 @@ int main(int argc, char **argv) {
 		case '?':
 			if (optopt == 's' && optarg == NULL) {
 				fprintf(stderr, "error: expected argument for option `-s`\n");
-				fprintf(stderr, USAGE);
+				fprintf(stderr, "%s\n", USAGE);
 			} else {
 				fprintf(stderr, "error: unknown option `-%c`\n", optopt);
-				fprintf(stderr, USAGE);
+				fprintf(stderr, "%s\n", USAGE);
 			}
 		default:
-			fprintf(stderr, USAGE);
+			fprintf(stderr, "%s\n", USAGE);
 			exit(EXIT_FAILURE);
 			break;
 		}
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
 
 	if (optind >= argc) {
 		fprintf(stderr, "error: expected arguments\n");
-		fprintf(stderr, USAGE);
+		fprintf(stderr, "%s\n", USAGE);
 	}
 
 	if (option.store == NULL) {
@@ -64,9 +64,16 @@ int main(int argc, char **argv) {
 		printf("use default store\n");
 	}
 
-	while (optind < argc) {
-		// TODO
-		printf("arg: %s\n", argv[optind++]);
+	if (option.unlink) {
+		while (optind < argc) {
+			// TODO
+			printf("unlink: %s\n", argv[optind++]);
+		}
+	} else {
+		while (optind < argc) {
+			// TODO
+			printf("link: %s\n", argv[optind++]);
+		}
 	}
 
 	return EXIT_SUCCESS;

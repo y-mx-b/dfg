@@ -23,4 +23,4 @@ options:
 ## Configuration
 
 If the `$DFG_STORE` directory is set, then `dfg` will use that as the path to
-the profile store instead (it is equivalent to using the `--store` option).
+the profile store instead (it is equivalent to using the `-s` option).
