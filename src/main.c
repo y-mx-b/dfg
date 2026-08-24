@@ -3,15 +3,13 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-#define VERSION "v0.1.0"
-#define USAGE "usage: dfg [-vhfu] [-s <store-path>] <profile|profile:path>..."
+#define USAGE "usage: dfg [-hfu] [-s <store-path>] <profile|profile:path>..."
 #define HELP \
 	"A dotfile configuration utility.\n" \
 	"\n" \
 	USAGE"\n" \
 	"\n" \
 	"options:\n" \
-	"    -v          Display version and license information.\n" \
 	"    -h          Display usage information.\n" \
 	"    -f          Overwrite any existing files encountered.\n" \
 	"    -u          Unlink the given profiles instead of linking them.\n" \
@@ -26,12 +24,8 @@ int main(int argc, char **argv) {
 
 	opterr = 0;
 	int opt;
-	while ((opt = getopt(argc, argv, "vhfus:")) != -1) {
+	while ((opt = getopt(argc, argv, "hfus:")) != -1) {
 		switch (opt) {
-		case 'v':
-			printf("dfg - %s\n", VERSION);
-			exit(EXIT_SUCCESS);
-			break;
 		case 'h':
 			printf(HELP);
 			exit(EXIT_SUCCESS);

@@ -11,10 +11,9 @@ by keeping them all contained within a single directory.
 ```
 A dotfile configuration utility.
 
-usage: dfg [-vhfu] [-s <path>] <profile>|<profile:path>...
+usage: dfg [-hfu] [-s <path>] <profile>|<profile:path>...
 
 options:
-    -v          Display version and license information.
     -h          Display usage information.
     -f          Overwrite any existing files encountered.
     -u          Unlink the given profiles instead of linking them.
