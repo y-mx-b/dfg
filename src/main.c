@@ -7,6 +7,8 @@
 #include <pwd.h>
 #include <string.h>
 
+// TODO: add `-r` option to specify root directory for link paths instead of using $HOME
+// ^ once this is done, use option.root instead of a random home variable
 #define USAGE "usage: dfg [-hfu] [-s <store-path>] <profile|profile:path>..."
 #define HELP \
 	"A dotfile configuration utility.\n" \
@@ -63,13 +65,14 @@ int main(int argc, char **argv) {
 		fprintf(stderr, "%s\n", USAGE);
 	}
 
+	char *home;
 	if (option.store == NULL) {
 		char *dfg_store = getenv("DFG_STORE");
 		if (dfg_store) {
 			option.store = dfg_store;
 		} else {
 			char default_store[PATH_MAX] = { 0 };
-			char *home = getenv("HOME");
+			home = getenv("HOME");
 			if (!home) {
 				struct passwd *pw = getpwuid(getuid());
 				home = pw->pw_dir;
@@ -81,15 +84,30 @@ int main(int argc, char **argv) {
 		printf("use default store: %s\n", option.store);
 	}
 
-	if (option.unlink) {
-		while (optind < argc) {
-			// TODO
-			printf("unlink: %s\n", argv[optind++]);
+	while (optind < argc) {
+		// TODO: handle ~ at the start of link path
+		char *profile = argv[optind++];
+		char *link_path = 0;
+		char link_buf[PATH_MAX] = { 0 };
+
+		int i = 0;
+		char c;
+		while ((c = profile[i++]) != ':' && c != '\0');
+		if (c == ':') {
+			profile[i-1] = '\0';
+			link_path = &profile[i];
+		} else {
+			strlcpy(link_buf, home, PATH_MAX);
+			strlcat(link_buf, "/", PATH_MAX);
+			strlcat(link_buf, profile, PATH_MAX);
+			link_path = link_buf;
 		}
-	} else {
-		while (optind < argc) {
-			// TODO
-			printf("link: %s\n", argv[optind++]);
+
+		// TODO: implement actual linking/unlinking
+		if (option.unlink) {
+			printf("unlink: %s:%s\n", profile, link_path);
+		} else {
+			printf("link: %s:%s\n", profile, link_path);
 		}
 	}
 
