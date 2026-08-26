@@ -17,7 +17,7 @@
 	"\n" \
 	"options:\n" \
 	"    -h          Display usage information.\n" \
-	"    -d          Perform a debug run and print all actions insteaed of executing.\n" \
+	"    -d          Perform a dry run and print all actions insteaed of executing.\n" \
 	"    -f          Overwrite any existing files encountered.\n" \
 	"    -u          Unlink the given profiles instead of linking them.\n" \
 	"    -s          Path to the profile store. [default: $HOME/.dfg]\n" \
@@ -41,7 +41,7 @@ const char *home_dir() {
 
 int main(int argc, char **argv) {
 	struct {
-		bool debug;
+		bool dry;
 		bool force;
 		bool unlink;
 		char store[PATH_MAX];
@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
 			exit(EXIT_SUCCESS);
 			break;
 		case 'd':
-			option.debug = true;
+			option.dry = true;
 			break;
 		case 'f':
 			option.force = true;
@@ -90,15 +90,15 @@ int main(int argc, char **argv) {
 	}
 
 	if (optind >= argc) {
-		// TODO: maybe just print help message instead?
 		fprintf(stderr, "error: expected arguments\n");
 		fprintf(stderr, "%s\n", USAGE);
+		exit(EXIT_FAILURE);
 	}
 
 	if (option.root[0] == 0) {
 		strlcpy(option.root, home_dir(), PATH_MAX);
 	}
-	if (option.debug) { printf("root: %s\n", option.root); }
+	if (option.dry) { printf("root: %s\n", option.root); }
 
 	if (option.store[0] == 0) {
 		char *dfg_store = getenv("DFG_STORE");
@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
 			strlcat(option.store, "/.dfg", PATH_MAX);
 		}
 	}
-	if (option.debug) { printf("store: %s\n", option.store); }
+	if (option.dry) { printf("store: %s\n", option.store); }
 
 	while (optind < argc) {
 		char *arg = argv[optind++];
@@ -171,8 +171,8 @@ int main(int argc, char **argv) {
 		// TODO: implement actual linking/unlinking
 		int err = 0;
 		if (option.unlink) {
-			if (option.debug) {
-				printf("unlink: %s : %s\n", profile, link);
+			if (option.dry) {
+				printf("unlink: \"%s\" -> \"%s\"\n", profile, link);
 				continue;
 			}
 
@@ -185,8 +185,8 @@ int main(int argc, char **argv) {
 				}
 			}
 		} else {
-			if (option.debug) {
-				printf("link: %s : %s\n", profile, link);
+			if (option.dry) {
+				printf("link: \"%s\" -> \"%s\"\n", profile, link);
 				continue;
 			}
 
