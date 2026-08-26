@@ -15,7 +15,7 @@ usage: dfg [-hdfu] [-s <path>] [-r <root-path>] <profile|profile:link>...
 
 options:
     -h          Display usage information.
-    -d          Perform a dry run and print all actions insteaed of executing.
+    -d          Perform a debug run and print all actions insteaed of executing.
     -f          Overwrite any existing files encountered.
     -u          Unlink the given profiles instead of linking them.
     -r          Path to the root directory for links. [default: $HOME]
