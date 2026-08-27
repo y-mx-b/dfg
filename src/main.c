@@ -125,7 +125,19 @@ int main(int argc, char **argv) {
 		if (c == ':') { arg[i++] = '\0'; }
 
 		// build profile path
+		// if profile is a relative path, use store as the base bath
+		// if profile is an absolute path, use the absolute path
+		// if profile starts with `~/`, replace with home directory
+		// TODO: use only the last path segment
 		size_t n = 0;
+		int last_sep = 0;
+		char *profile_name;
+		for (int j = 0, c = arg[j]; c != '\0'; c = arg[++j]) {
+			if (c == '/') { last_sep = j; }
+		}
+		if (last_sep > 0) {
+			profile_name = &arg[last_sep + 1];
+		}
 		switch (arg[0]) {
 		case '/':
 			n = strlcpy(profile, arg, PATH_MAX);
@@ -136,20 +148,22 @@ int main(int argc, char **argv) {
 				break;
 			}
 		default:
-			n = snprintf(profile, PATH_MAX, "%s/%s", option.store, arg);
+			n = snprintf(profile, PATH_MAX, "%s/%s", option.store, profile_name);
 		}
 		if (n >= PATH_MAX) {
 			fprintf(stderr, "error: profile path too long, skipping (truncated profile path: \"%s\")\n", profile);
 			continue;
 		}
 
-		// TODO: check if profile is a symlink and error if it is
-
 		// build link path
+		// if absolute path is specified, use absolute path
+		// if link path starts with `~/`, replace with home directory
+		// if relative path is specified, append to root path
+		// if no link path is specified, append profile name to root path
 		n = 0;
 		switch (arg[i]) {
 		case '\0':
-			n = snprintf(link, PATH_MAX, "%s/%s", option.root, arg);
+			n = snprintf(link, PATH_MAX, "%s/%s", option.root, profile_name);
 			break;
 		case '/':
 			n = strlcpy(link, &arg[i], PATH_MAX);
@@ -168,7 +182,6 @@ int main(int argc, char **argv) {
 			continue;
 		}
 
-		// TODO: implement actual linking/unlinking
 		int err = 0;
 		if (option.unlink) {
 			if (option.dry) {
@@ -190,7 +203,55 @@ int main(int argc, char **argv) {
 				continue;
 			}
 
+			if (access(profile, F_OK) != 0) {
+				fprintf(stderr, "error: profile `%s` does not exist\n", arg);
+				continue;
+			}
+
 			err = symlink(profile, link);
+			if (err == 0) { continue; }
+			fprintf(stderr, "failed to link \"%s\" -> \"%s\"", profile, link);
+			switch(errno) {
+			case EACCES:
+				fprintf(stderr, "error: permission denied\n");
+				break;
+			case EDQUOT:
+				fprintf(stderr, "error: disk quota exceed\n");
+				break;
+			case EEXIST:
+				fprintf(stderr, "error: link path already exists\n");
+				break;
+			case EFAULT:
+				fprintf(stderr, "error: profile or link path points outside accessible address space\n");
+				break;
+			case EIO:
+				fprintf(stderr, "error: I/O error\n");
+				break;
+			case ELOOP:
+				fprintf(stderr, "error: failed to resolve link path (too many symlinks)\n");
+				break;
+			case ENAMETOOLONG:
+				fprintf(stderr, "error: profile or link path too long\n");
+				break;
+			case ENOENT:
+				fprintf(stderr, "error: link path has a component that does not exist\n");
+				break;
+			case ENOSPC:
+				fprintf(stderr, "error: ran out of space\n");
+				break;
+			case ENOTDIR:
+				fprintf(stderr, "error: link path contains a component that is not a directory\n");
+				break;
+			case EROFS:
+				fprintf(stderr, "error: link path is on a read-only filesystem\n");
+				break;
+			case EILSEQ:
+				fprintf(stderr, "error: filename does not match encoding rules\n");
+				break;
+			default:
+				fprintf(stderr, "error: unknown error\n");
+				break;
+			}
 			// TODO: implement -f flag for replacing existing file system entries
 			// TODO: check if profile exists, error if not
 		}
