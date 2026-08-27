@@ -8,6 +8,7 @@
 #include <string.h>
 #include <sys/errno.h>
 #include <sys/stat.h>
+#include <stdarg.h>
 
 #define USAGE "usage: dfg [-hdfu] [-s <store-path>] [-r <root-path>] <profile|profile:link>..."
 #define HELP \
@@ -39,8 +40,42 @@ const char *home_dir() {
 	return home;
 }
 
+/// Print to `stderr`.
+void eprintf(const char *restrict format, ...) {
+	va_list args;
+	va_start(args, format);
+	vfprintf(stderr, format, args);
+	va_end(args);
+}
+
+/// Internal function to join path components into a single path.
+void _path_join(size_t n, char *buf, ...) {
+	va_list components;
+	va_start(components, buf);
+
+	char *component;
+	memset(buf, 0, n);
+	if ((component = va_arg(components, char *)) != NULL) {
+		// TODO: handle `~`
+		strlcpy(buf, component, n);
+	}
+	while ((component = va_arg(components, char *)) != NULL) {
+		// TODO: remove extraneous path separators
+		strlcat(buf, "/", n);
+		strlcat(buf, component, n);
+	}
+
+	va_end(components);
+}
+
+#define path_join(n, buf, ...) _path_join(n, buf, __VA_ARGS__, NULL);
+
 int main(int argc, char **argv) {
-	struct {
+	char buf[1024];
+	path_join(1024, buf, "hello", "world");
+	printf("%s\n", buf);
+
+	struct option {
 		bool dry;
 		bool force;
 		bool unlink;
@@ -73,25 +108,25 @@ int main(int argc, char **argv) {
 			break;
 		case '?':
 			if (optopt == 's' && optarg == NULL) {
-				fprintf(stderr, "error: expected argument for option `-s`\n");
-				fprintf(stderr, "%s\n", USAGE);
+				eprintf("error: expected argument for option `-s`\n");
+				eprintf("%s\n", USAGE);
 			} else if (optopt == 'r' && optarg == NULL) {
-				fprintf(stderr, "error: expected argument for option `-r`\n");
-				fprintf(stderr, "%s\n", USAGE);
+				eprintf("error: expected argument for option `-r`\n");
+				eprintf("%s\n", USAGE);
 			} else {
-				fprintf(stderr, "error: unknown option `-%c`\n", optopt);
-				fprintf(stderr, "%s\n", USAGE);
+				eprintf("error: unknown option `-%c`\n", optopt);
+				eprintf("%s\n", USAGE);
 			}
 		default:
-			fprintf(stderr, "%s\n", USAGE);
+			eprintf("%s\n", USAGE);
 			exit(EXIT_FAILURE);
 			break;
 		}
 	}
 
 	if (optind >= argc) {
-		fprintf(stderr, "error: expected arguments\n");
-		fprintf(stderr, "%s\n", USAGE);
+		eprintf("error: expected arguments\n");
+		eprintf("%s\n", USAGE);
 		exit(EXIT_FAILURE);
 	}
 
@@ -151,7 +186,7 @@ int main(int argc, char **argv) {
 			n = snprintf(profile, PATH_MAX, "%s/%s", option.store, profile_name);
 		}
 		if (n >= PATH_MAX) {
-			fprintf(stderr, "error: profile path too long, skipping (truncated profile path: \"%s\")\n", profile);
+			eprintf("error: profile path too long, skipping (truncated profile path: \"%s\")\n", profile);
 			continue;
 		}
 
@@ -178,7 +213,7 @@ int main(int argc, char **argv) {
 			break;
 		}
 		if (n >= PATH_MAX) {
-			fprintf(stderr, "error: link path too long, skipping (truncated link path: \"%s\")\n", link);
+			eprintf("error: link path too long, skipping (truncated link path: \"%s\")\n", link);
 			continue;
 		}
 
@@ -194,7 +229,7 @@ int main(int argc, char **argv) {
 				if (S_ISLNK(link_stat.st_mode)) {
 					err = remove(link);
 				} else {
-					fprintf(stderr, "error: expected symlink at `%s`\n", link);
+					eprintf("error: expected symlink at `%s`\n", link);
 				}
 			}
 		} else {
@@ -204,52 +239,52 @@ int main(int argc, char **argv) {
 			}
 
 			if (access(profile, F_OK) != 0) {
-				fprintf(stderr, "error: profile `%s` does not exist\n", arg);
+				eprintf("error: profile `%s` does not exist\n", arg);
 				continue;
 			}
 
 			err = symlink(profile, link);
 			if (err == 0) { continue; }
-			fprintf(stderr, "failed to link \"%s\" -> \"%s\"", profile, link);
+			eprintf("failed to link \"%s\" -> \"%s\"", profile, link);
 			switch(errno) {
 			case EACCES:
-				fprintf(stderr, "error: permission denied\n");
+				eprintf("error: permission denied\n");
 				break;
 			case EDQUOT:
-				fprintf(stderr, "error: disk quota exceed\n");
+				eprintf("error: disk quota exceed\n");
 				break;
 			case EEXIST:
-				fprintf(stderr, "error: link path already exists\n");
+				eprintf("error: link path already exists\n");
 				break;
 			case EFAULT:
-				fprintf(stderr, "error: profile or link path points outside accessible address space\n");
+				eprintf("error: profile or link path points outside accessible address space\n");
 				break;
 			case EIO:
-				fprintf(stderr, "error: I/O error\n");
+				eprintf("error: I/O error\n");
 				break;
 			case ELOOP:
-				fprintf(stderr, "error: failed to resolve link path (too many symlinks)\n");
+				eprintf("error: failed to resolve link path (too many symlinks)\n");
 				break;
 			case ENAMETOOLONG:
-				fprintf(stderr, "error: profile or link path too long\n");
+				eprintf("error: profile or link path too long\n");
 				break;
 			case ENOENT:
-				fprintf(stderr, "error: link path has a component that does not exist\n");
+				eprintf("error: link path has a component that does not exist\n");
 				break;
 			case ENOSPC:
-				fprintf(stderr, "error: ran out of space\n");
+				eprintf("error: ran out of space\n");
 				break;
 			case ENOTDIR:
-				fprintf(stderr, "error: link path contains a component that is not a directory\n");
+				eprintf("error: link path contains a component that is not a directory\n");
 				break;
 			case EROFS:
-				fprintf(stderr, "error: link path is on a read-only filesystem\n");
+				eprintf("error: link path is on a read-only filesystem\n");
 				break;
 			case EILSEQ:
-				fprintf(stderr, "error: filename does not match encoding rules\n");
+				eprintf("error: filename does not match encoding rules\n");
 				break;
 			default:
-				fprintf(stderr, "error: unknown error\n");
+				eprintf("error: unknown error\n");
 				break;
 			}
 			// TODO: implement -f flag for replacing existing file system entries
