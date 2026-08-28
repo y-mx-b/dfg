@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
 				break;
 			}
 		default:
-			n = snprintf(profile, PATH_MAX, "%s/%s", option.store, profile_name);
+			n = snprintf(profile, PATH_MAX, "%s/%s", option.store, arg);
 		}
 		if (n >= PATH_MAX) {
 			eprintf("error: profile path too long, skipping (truncated profile path: \"%s\")\n", profile);
@@ -135,6 +135,7 @@ int main(int argc, char **argv) {
 				continue;
 			}
 
+			// TODO: extract into separate function and check errno
 			struct stat link_stat;
 			if ((err = lstat(link, &link_stat)) == 0) {
 				if (S_ISLNK(link_stat.st_mode)) {
@@ -148,65 +149,11 @@ int main(int argc, char **argv) {
 				printf("link: \"%s\" -> \"%s\"\n", profile, link);
 				continue;
 			}
-
-			if (access(profile, F_OK) != 0) {
-				eprintf("error: profile `%s` does not exist\n", arg);
-				continue;
+			const char *err_msg = dfg_link(profile, link);
+			if (err_msg) {
+				eprintf("failed to link \"%s\" -> \"%s\"", profile, link);
+				eprintf("%s\n", err_msg);
 			}
-
-			err = symlink(profile, link);
-			if (err == 0) { continue; }
-			eprintf("failed to link \"%s\" -> \"%s\"", profile, link);
-			switch(errno) {
-			case EACCES:
-				eprintf("error: permission denied\n");
-				break;
-			case EDQUOT:
-				eprintf("error: disk quota exceed\n");
-				break;
-			case EEXIST:
-				eprintf("error: link path already exists\n");
-				break;
-			case EFAULT:
-				eprintf("error: profile or link path points outside accessible address space\n");
-				break;
-			case EIO:
-				eprintf("error: I/O error\n");
-				break;
-			case ELOOP:
-				eprintf("error: failed to resolve link path (too many symlinks)\n");
-				break;
-			case ENAMETOOLONG:
-				eprintf("error: profile or link path too long\n");
-				break;
-			case ENOENT:
-				eprintf("error: link path has a component that does not exist\n");
-				break;
-			case ENOSPC:
-				eprintf("error: ran out of space\n");
-				break;
-			case ENOTDIR:
-				eprintf("error: link path contains a component that is not a directory\n");
-				break;
-			case EROFS:
-				eprintf("error: link path is on a read-only filesystem\n");
-				break;
-			case EILSEQ:
-				eprintf("error: filename does not match encoding rules\n");
-				break;
-			default:
-				eprintf("error: unknown error\n");
-				break;
-			}
-			// TODO: implement -f flag for replacing existing file system entries
-			// TODO: check if profile exists, error if not
-		}
-
-		// TODO: extract functionality into separate functions that return error code + context
-		// TODO: implement error handling
-		if (err == 0) { continue; }
-		switch (errno) {
-
 		}
 	}
 
