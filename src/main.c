@@ -48,18 +48,26 @@ void eprintf(const char *restrict format, ...) {
 	va_end(args);
 }
 
+// TODO: return total length of attempted write like `strlcat` and `snprintf`
 /// Internal function to join path components into a single path.
 void _path_join(size_t n, char *buf, ...) {
 	va_list components;
 	va_start(components, buf);
 
-	char *component;
-	memset(buf, 0, n);
-	if ((component = va_arg(components, char *)) != NULL) {
-		// TODO: handle `~`
-		strlcpy(buf, component, n);
+	// TODO: keep track of total length written and replace `strlcat` with
+	// `snprintf`
+	const char *component;
+	memset(buf, 0, n); // clear out buffer so strlcat works properly
+	if ((component = va_arg(components, const char *)) != NULL) {
+		if (component[0] == '~'
+			&& (component[1] == '\0' || component[1] == '/'))
+		{
+			strlcpy(buf, home_dir(), n);
+			component += 1;
+		}
+		strlcat(buf, component, n);
 	}
-	while ((component = va_arg(components, char *)) != NULL) {
+	while ((component = va_arg(components, const char *)) != NULL) {
 		// TODO: remove extraneous path separators
 		strlcat(buf, "/", n);
 		strlcat(buf, component, n);
@@ -68,13 +76,10 @@ void _path_join(size_t n, char *buf, ...) {
 	va_end(components);
 }
 
+/// Helper macro to join path components into a single path.
 #define path_join(n, buf, ...) _path_join(n, buf, __VA_ARGS__, NULL);
 
 int main(int argc, char **argv) {
-	char buf[1024];
-	path_join(1024, buf, "hello", "world");
-	printf("%s\n", buf);
-
 	struct option {
 		bool dry;
 		bool force;
@@ -85,6 +90,7 @@ int main(int argc, char **argv) {
 
 	opterr = 0;
 	int opt;
+	size_t len = 0;
 	while ((opt = getopt(argc, argv, "hdfus:r:")) != -1) {
 		switch (opt) {
 		case 'h':
@@ -101,21 +107,28 @@ int main(int argc, char **argv) {
 			option.unlink = true;
 			break;
 		case 's':
-			strlcpy(option.store, optarg, PATH_MAX);
+			len = strlcpy(option.store, optarg, PATH_MAX);
+			if (len >= PATH_MAX) {
+				eprintf("error: store path too long\n");
+				exit(EXIT_FAILURE);
+			}
+			len = 0;
 			break;
 		case 'r':
-			strlcpy(option.root, optarg, PATH_MAX);
+			len = strlcpy(option.root, optarg, PATH_MAX);
+			if (len >= PATH_MAX) {
+				eprintf("error: root path too long\n");
+				exit(EXIT_FAILURE);
+			}
+			len = 0;
 			break;
 		case '?':
 			if (optopt == 's' && optarg == NULL) {
 				eprintf("error: expected argument for option `-s`\n");
-				eprintf("%s\n", USAGE);
 			} else if (optopt == 'r' && optarg == NULL) {
 				eprintf("error: expected argument for option `-r`\n");
-				eprintf("%s\n", USAGE);
 			} else {
 				eprintf("error: unknown option `-%c`\n", optopt);
-				eprintf("%s\n", USAGE);
 			}
 		default:
 			eprintf("%s\n", USAGE);
@@ -140,21 +153,20 @@ int main(int argc, char **argv) {
 		if (dfg_store) {
 			strlcpy(option.store, dfg_store, PATH_MAX);
 		} else {
-			strlcpy(option.store, home_dir(), PATH_MAX);
-			strlcat(option.store, "/.dfg", PATH_MAX);
+			path_join(PATH_MAX, option.store, home_dir(), ".dfg");
 		}
 	}
 	if (option.dry) { printf("store: %s\n", option.store); }
 
-	while (optind < argc) {
-		char *arg = argv[optind++];
+	char *arg;
+	while ((arg = argv[optind++]) != NULL) {
 		char profile[PATH_MAX] = { 0 };
 		char link[PATH_MAX] = { 0 };
 
 		int i = 0;
 		char c;
 		// search for colon separator
-		for (c = arg[i]; c != ':' && c != '\0'; c = arg[++i]);
+		for (c = arg[i]; c != ':' && c != '\0'; c = arg[++i]) {}
 		// if colon separator exists, overwrite colon with '\0' to split
 		// the string such at `arg` is the profile and `arg[i]` is the link
 		if (c == ':') { arg[i++] = '\0'; }
@@ -163,7 +175,6 @@ int main(int argc, char **argv) {
 		// if profile is a relative path, use store as the base bath
 		// if profile is an absolute path, use the absolute path
 		// if profile starts with `~/`, replace with home directory
-		// TODO: use only the last path segment
 		size_t n = 0;
 		int last_sep = 0;
 		char *profile_name;
@@ -172,6 +183,8 @@ int main(int argc, char **argv) {
 		}
 		if (last_sep > 0) {
 			profile_name = &arg[last_sep + 1];
+		} else {
+			profile_name = arg;
 		}
 		switch (arg[0]) {
 		case '/':
