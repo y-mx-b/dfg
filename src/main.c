@@ -3,42 +3,13 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <limits.h>
-#include <sys/types.h>
-#include <pwd.h>
 #include <string.h>
 #include <sys/errno.h>
 #include <sys/stat.h>
 #include <stdarg.h>
 
-#define USAGE "usage: dfg [-hdfu] [-s <store-path>] [-r <root-path>] <profile|profile:link>..."
-#define HELP \
-	"A dotfile configuration utility.\n" \
-	"\n" \
-	USAGE"\n" \
-	"\n" \
-	"options:\n" \
-	"    -h          Display usage information.\n" \
-	"    -d          Perform a dry run and print all actions insteaed of executing.\n" \
-	"    -f          Overwrite any existing files encountered.\n" \
-	"    -u          Unlink the given profiles instead of linking them.\n" \
-	"    -s          Path to the profile store. [default: $HOME/.dfg]\n" \
-	"    -r          Path to the root directory for links. [default: $HOME]\n"
-
-/// Return a lazily initialized static path to the user's home directory.'
-const char *home_dir() {
-	static char home[PATH_MAX] = { 0 };
-
-	if (home[0] == 0) {
-		char *home_ptr = getenv("HOME");
-		if (!home_ptr) {
-			struct passwd *pw = getpwuid(getuid());
-			home_ptr = pw->pw_dir;
-		}
-		strlcpy(home, home_ptr, PATH_MAX);
-	}
-
-	return home;
-}
+#include "path.h"
+#include "cli.h"
 
 /// Print to `stderr`.
 void eprintf(const char *restrict format, ...) {
@@ -48,93 +19,20 @@ void eprintf(const char *restrict format, ...) {
 	va_end(args);
 }
 
-// TODO: return total length of attempted write like `strlcat` and `snprintf`
-/// Internal function to join path components into a single path.
-void _path_join(size_t n, char *buf, ...) {
-	va_list components;
-	va_start(components, buf);
-
-	// TODO: keep track of total length written and replace `strlcat` with
-	// `snprintf`
-	const char *component;
-	memset(buf, 0, n); // clear out buffer so strlcat works properly
-	if ((component = va_arg(components, const char *)) != NULL) {
-		if (component[0] == '~'
-			&& (component[1] == '\0' || component[1] == '/'))
-		{
-			strlcpy(buf, home_dir(), n);
-			component += 1;
-		}
-		strlcat(buf, component, n);
-	}
-	while ((component = va_arg(components, const char *)) != NULL) {
-		// TODO: remove extraneous path separators
-		strlcat(buf, "/", n);
-		strlcat(buf, component, n);
-	}
-
-	va_end(components);
-}
-
-/// Helper macro to join path components into a single path.
-#define path_join(n, buf, ...) _path_join(n, buf, __VA_ARGS__, NULL);
-
 int main(int argc, char **argv) {
-	struct option {
-		bool dry;
-		bool force;
-		bool unlink;
-		char store[PATH_MAX];
-		char root[PATH_MAX];
-	} option = { 0 };
+	struct option option = {
+		.help = false,
+		.dry = false,
+		.force = false,
+		.unlink = false,
+		.store = { 0 },
+		.root = { 0 },
+	};
 
-	opterr = 0;
-	int opt;
-	size_t len = 0;
-	while ((opt = getopt(argc, argv, "hdfus:r:")) != -1) {
-		switch (opt) {
-		case 'h':
-			printf(HELP);
-			exit(EXIT_SUCCESS);
-			break;
-		case 'd':
-			option.dry = true;
-			break;
-		case 'f':
-			option.force = true;
-			break;
-		case 'u':
-			option.unlink = true;
-			break;
-		case 's':
-			len = strlcpy(option.store, optarg, PATH_MAX);
-			if (len >= PATH_MAX) {
-				eprintf("error: store path too long\n");
-				exit(EXIT_FAILURE);
-			}
-			len = 0;
-			break;
-		case 'r':
-			len = strlcpy(option.root, optarg, PATH_MAX);
-			if (len >= PATH_MAX) {
-				eprintf("error: root path too long\n");
-				exit(EXIT_FAILURE);
-			}
-			len = 0;
-			break;
-		case '?':
-			if (optopt == 's' && optarg == NULL) {
-				eprintf("error: expected argument for option `-s`\n");
-			} else if (optopt == 'r' && optarg == NULL) {
-				eprintf("error: expected argument for option `-r`\n");
-			} else {
-				eprintf("error: unknown option `-%c`\n", optopt);
-			}
-		default:
-			eprintf("%s\n", USAGE);
-			exit(EXIT_FAILURE);
-			break;
-		}
+	const char *err = cli_parse(argc, argv, &option);
+	if (err) {
+		eprintf("%s\n", err);
+		exit(EXIT_FAILURE);
 	}
 
 	if (optind >= argc) {
