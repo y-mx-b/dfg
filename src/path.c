@@ -51,6 +51,7 @@ void _path_join(size_t n, char *buf, ...) {
 	va_end(components);
 }
 
+// TODO: remove static err msg buffers, change signature to receive err msg buffer
 const char *dfg_link(const char *profile, const char *link) {
 	static char err[1024];
 	memset(err, 0, 1024);

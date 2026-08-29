@@ -10,6 +10,10 @@ void _path_join(size_t n, char *buf, ...);
 /// Helper macro to join path components into a single path.
 #define path_join(n, buf, ...) _path_join(n, buf, __VA_ARGS__, NULL);
 
+/// Link profile. Returns error message on failure or NULL on success.
 const char *dfg_link(const char *profile, const char *link);
+
+/// Link profile. Returns error message on failure or NULL on success.
+const char *dfg_unlink(const char *profile, const char *link);
 
 #endif
