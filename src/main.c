@@ -188,20 +188,20 @@ int main(int argc, char **argv) {
 			}
 			if (split.link == NULL) {
 				n = snprintf(link, PATH_MAX, "%s/%s", option.root, profile_name);
+			} else {
+				switch (split.link[0]) {
+				case '/':
+					n = strlcpy(link, split.link, PATH_MAX);
+					break;
+				case '~':
+					if (split.link[1] != '/') { break; }
+					n = snprintf(link, PATH_MAX, "%s/%s", home_dir(), &split.link[2]);
+					break;
+				default:
+					n = snprintf(link, PATH_MAX, "%s/%s", option.root, split.link);
+					break;
+				}
 			}
-			switch (split.link[0]) {
-			case '/':
-				n = strlcpy(link, split.link, PATH_MAX);
-				break;
-			case '~':
-				if (split.link[1] != '/') { break; }
-				n = snprintf(link, PATH_MAX, "%s/%s", home_dir(), &split.link[2]);
-				break;
-			default:
-				n = snprintf(link, PATH_MAX, "%s/%s", option.root, split.link);
-				break;
-			}
-
 			if (n >= PATH_MAX) {
 				eprintf("error: link path too long, skipping (truncated link path: \"%s\")\n", link);
 				continue;
