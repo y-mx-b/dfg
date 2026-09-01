@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <sys/errno.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 const char *home_dir(void) {
 	static char home[PATH_MAX] = { 0 };
@@ -51,17 +52,16 @@ void _path_join(size_t n, char *buf, ...) {
 	va_end(components);
 }
 
-// TODO: remove static err msg buffers, change signature to receive err msg buffer
-const char *dfg_link(const char *profile, const char *link) {
-	static char err[1024];
-	memset(err, 0, 1024);
-
+const char *dfg_link(const char *profile, const char *link, bool force) {
 	if (access(profile, F_OK) != 0) {
-		snprintf(err, 1024, "error: profile `%s` does not exist\n", profile);
-		return err;
+		return "error: profile does not exist\n";
 	}
 
 	if (symlink(profile, link) == 0) { return NULL; }
+	if (force && errno == EEXIST) {
+		remove(link);
+		return dfg_link(profile, link, force);
+	}
 	switch(errno) {
 	case EACCES:
 		return "error: permission denied";
@@ -103,6 +103,20 @@ const char *dfg_link(const char *profile, const char *link) {
 		return "error: unknown error";
 		break;
 	}
-	// TODO: implement -f flag for replacing existing file system entries
-	// TODO: check if profile exists, error if not
+}
+
+const char *dfg_unlink(const char *link) {
+	struct stat link_stat;
+	int err;
+	if ((err = lstat(link, &link_stat)) == 0) {
+		if (!S_ISLNK(link_stat.st_mode)) { return "error: expected symlink"; }
+		err = remove(link);
+	}
+	if (err == 0) { return NULL; }
+	switch (errno) {
+		// TODO: handle all cases
+	default:
+		return "error: failed to unlink";
+		break;
+	}
 }

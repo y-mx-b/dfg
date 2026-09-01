@@ -4,36 +4,9 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <string.h>
-#include <sys/errno.h>
-#include <sys/stat.h>
 #include <stdarg.h>
 
 #include "path.h"
-#include "cli.h"
-
-struct arg {
-	char *profile;
-	char *link;
-};
-
-/// Parse an argument of the form `[profile]:[link]`.
-///
-/// If either `profile` or `link` are not specified, then the corresponding
-/// return value will be set to NULL.
-struct arg arg_parse(char *arg) {
-	char c;
-	int i = 0;
-	// search for colon separator
-	for (c = arg[i]; c != ':' && c != '\0'; c = arg[++i]) {}
-	// if colon separator exists, overwrite colon with '\0' to split
-	// the string such at `arg` is the profile and `arg[i]` is the link
-	if (c == ':') { arg[i++] = '\0'; }
-
-	return (struct arg) {
-		.profile = arg[0] ? arg : NULL,
-		.link = arg[i] ? &arg[i] : NULL
-	};
-}
 
 /// Print to `stderr`.
 void eprintf(const char *restrict format, ...) {
@@ -43,33 +16,88 @@ void eprintf(const char *restrict format, ...) {
 	va_end(args);
 }
 
+#define USAGE "usage: dfg [-hdfu] [-s <store-path>] [-r <root-path>] <profile|profile:link>..."
+#define HELP \
+	"A dotfile configuration utility.\n" \
+	"\n" \
+	USAGE"\n" \
+	"\n" \
+	"options:\n" \
+	"    -h          Display usage information.\n" \
+	"    -d          Perform a dry run and print all actions insteaed of executing.\n" \
+	"    -f          Overwrite any existing files encountered.\n" \
+	"    -u          Unlink the given profiles instead of linking them.\n" \
+	"    -s          Path to the profile store. [default: $HOME/.dfg]\n" \
+	"    -r          Path to the root directory for links. [default: $HOME]\n"
+
 int main(int argc, char **argv) {
-	struct option option = {
-		.help = false,
-		.dry = false,
-		.force = false,
-		.unlink = false,
-		.store = { 0 },
-		.root = { 0 },
-	};
+	struct option {
+		bool help; // -h
+		bool dry; // -d
+		bool force; // -f
+		bool unlink; // -u
+		char store[PATH_MAX]; // -s <store-path>
+		char root[PATH_MAX]; // -r <root-path>
+	} option = { 0 };
 
-	const char *err = cli_parse(argc, argv, &option);
-	if (err) {
-		eprintf("%s\n", err);
-		exit(EXIT_FAILURE);
+	// -- PARSE COMMAND-LINE OPTIONS
+	{
+		opterr = 0;
+		int opt;
+		size_t len = 0;
+		while ((opt = getopt(argc, argv, "hdfus:r:")) != -1) {
+			switch (opt) {
+			case 'h':
+				option.help = true;
+				break;
+			case 'd':
+				option.dry = true;
+				break;
+			case 'f':
+				option.force = true;
+				break;
+			case 'u':
+				option.unlink = true;
+				break;
+			case 's':
+				len = strlcpy(option.store, optarg, PATH_MAX);
+				if (len >= PATH_MAX) {
+					eprintf("error: store path too long\n");
+					exit(EXIT_FAILURE);
+				}
+				len = 0;
+				break;
+			case 'r':
+				len = strlcpy(option.root, optarg, PATH_MAX);
+				if (len >= PATH_MAX) {
+					eprintf("error: root path too long\n");
+					exit(EXIT_FAILURE);
+				}
+				len = 0;
+				break;
+			case '?':
+				if (optopt == 's' && optarg == NULL) {
+					eprintf("error: expected argument for option `-s`\n");
+				} else if (optopt == 'r' && optarg == NULL) {
+					eprintf("error: expected argument for option `-r`\n");
+				} else {
+					eprintf("error: unknown option, `-%c`\n", optopt);
+				}
+				exit(EXIT_FAILURE);
+			default:
+				printf("getopt default case?\n");
+				break;
+			}
+		}
+
+		if (optind >= argc) {
+			eprintf("error: expected arguments\n");
+			eprintf("%s\n", USAGE);
+			exit(EXIT_FAILURE);
+		}
 	}
 
-	if (optind >= argc) {
-		eprintf("error: expected arguments\n");
-		eprintf("%s\n", USAGE);
-		exit(EXIT_FAILURE);
-	}
-
-	if (option.root[0] == 0) {
-		strlcpy(option.root, home_dir(), PATH_MAX);
-	}
-	if (option.dry) { printf("root: %s\n", option.root); }
-
+	// -- INIT STORE PATH --
 	if (option.store[0] == 0) {
 		char *dfg_store = getenv("DFG_STORE");
 		if (dfg_store) {
@@ -80,93 +108,122 @@ int main(int argc, char **argv) {
 	}
 	if (option.dry) { printf("store: %s\n", option.store); }
 
-	// parse and operate over non-option arguments
-	for (char *arg_str; (arg_str = argv[optind]) != NULL; optind += 1) {
-		char profile[PATH_MAX] = { 0 };
-		char link[PATH_MAX] = { 0 };
+	// -- INIT ROOT PATH --
+	if (option.root[0] == 0) {
+		strlcpy(option.root, home_dir(), PATH_MAX);
+	}
+	if (option.dry) { printf("root: %s\n", option.root); }
 
-		struct arg arg = arg_parse(arg_str);
+	// -- MAIN LOGIC
+	for (char *arg; (arg = argv[optind]) != NULL; optind += 1) {
+		// -- PARSE ARG --
+		// if of the form `:link`, profile will be null
+		// if of the form `profile:`, link will be null
+		// if of the form `:`, both will be null
+		struct {
+			char *profile;
+			char *link;
+		} split = { 0 };
+		{
+			char c;
+			int i = 0;
+			// search for colon separator
+			for (c = arg[i]; c != ':' && c != '\0'; c = arg[++i]) {}
+			// if colon separator exists, overwrite colon with '\0' to split
+			// the string such at `arg` is the profile and `arg[i]` is the link
+			if (c == ':') { arg[i++] = '\0'; }
 
-		// build profile path
+			split.profile = arg[0] ? arg : NULL;
+			split.link = arg[i] ? &arg[i] : NULL;
+		}
+
+		// -- BUILD PROFILE PATH --
 		// if profile is a relative path, use store as the base bath
 		// if profile is an absolute path, use the absolute path
 		// if profile starts with `~/`, replace with home directory
-		size_t n = 0;
-		int last_sep = 0;
+		char profile[PATH_MAX] = { 0 };
 		char *profile_name;
-		if (arg.profile) {
-			for (int j = 0, c = arg.profile[j]; c != '\0'; c = arg.profile[++j]) {
-				if (c == '/') { last_sep = j; }
-			}
-			if (last_sep > 0) {
-				profile_name = &arg.profile[last_sep + 1];
-			} else {
-				profile_name = arg.profile;
-			}
-			switch (arg.profile[0]) {
-			case '/':
-				n = strlcpy(profile, arg.profile, PATH_MAX);
-				break;
-			case '~':
-				if (arg.profile[1] == '/') {
-					n = snprintf(profile, PATH_MAX, "%s/%s", home_dir(), &arg.profile[2]);
+		{
+			size_t n = 0;
+			int last_sep = 0;
+			if (split.profile) {
+				for (int j = 0, c = split.profile[j]; c != '\0'; c = split.profile[++j]) {
+					if (c == '/') { last_sep = j; }
+				}
+				if (last_sep > 0) {
+					profile_name = &split.profile[last_sep + 1];
+				} else {
+					profile_name = split.profile;
+				}
+				switch (split.profile[0]) {
+				case '/':
+					n = strlcpy(profile, split.profile, PATH_MAX);
+					break;
+				case '~':
+					if (split.profile[1] != '/') { break; }
+					n = snprintf(profile, PATH_MAX, "%s/%s", home_dir(), &split.profile[2]);
+					break;
+				default:
+					n = snprintf(profile, PATH_MAX, "%s/%s", option.store, split.profile);
 					break;
 				}
-			default:
-				n = snprintf(profile, PATH_MAX, "%s/%s", option.store, arg.profile);
+			}
+			if (n >= PATH_MAX) {
+				eprintf("error: profile path too long, skipping (truncated profile path: \"%s\")\n", profile);
+				continue;
 			}
 		}
-		if (n >= PATH_MAX) {
-			eprintf("error: profile path too long, skipping (truncated profile path: \"%s\")\n", profile);
-			continue;
-		}
 
-		// build link path
+		// -- BUILD LINK PATH --
 		// if absolute path is specified, use absolute path
 		// if link path starts with `~/`, replace with home directory
 		// if relative path is specified, append to root path
 		// if no link path is specified, append profile name to root path
-		n = 0;
-		if (arg.link) {
-			switch (arg.link[0]) {
+		char link[PATH_MAX] = { 0 };
+		{
+			size_t n = 0;
+			if (split.link == NULL && split.profile == NULL) {
+				eprintf("error: failed to construct link path\n");
+				continue;
+			}
+			if (split.link == NULL) {
+				n = snprintf(link, PATH_MAX, "%s/%s", option.root, profile_name);
+			}
+			switch (split.link[0]) {
 			case '/':
-				n = strlcpy(link, arg.link, PATH_MAX);
+				n = strlcpy(link, split.link, PATH_MAX);
 				break;
 			case '~':
-				if (arg.link[1] == '/') {
-					n = snprintf(link, PATH_MAX, "%s/%s", home_dir(), &arg.link[2]);
-					break;
-				}
+				if (split.link[1] != '/') { break; }
+				n = snprintf(link, PATH_MAX, "%s/%s", home_dir(), &split.link[2]);
+				break;
 			default:
-				n = snprintf(link, PATH_MAX, "%s/%s", option.root, arg.link);
+				n = snprintf(link, PATH_MAX, "%s/%s", option.root, split.link);
 				break;
 			}
-		} else {
-			n = snprintf(link, PATH_MAX, "%s/%s", option.root, profile_name);
-		}
-		if (n >= PATH_MAX) {
-			eprintf("error: link path too long, skipping (truncated link path: \"%s\")\n", link);
-			continue;
+
+			if (n >= PATH_MAX) {
+				eprintf("error: link path too long, skipping (truncated link path: \"%s\")\n", link);
+				continue;
+			}
 		}
 
-		int err = 0;
+		const char *err_msg;
 		if (option.unlink) {
+			// -- UNLINK --
 			if (option.dry) {
-				printf("unlink: \"%s\" -> \"%s\"\n", profile, link);
+				printf("unlink: \"%s\"\n", link);
 				continue;
 			}
 
-			// TODO: extract into separate function and check errno
-			struct stat link_stat;
-			if ((err = lstat(link, &link_stat)) == 0) {
-				if (S_ISLNK(link_stat.st_mode)) {
-					err = remove(link);
-				} else {
-					eprintf("error: expected symlink at `%s`\n", link);
-				}
+			err_msg = dfg_unlink(link);
+			if (err_msg) {
+				eprintf("failed to unlink \"%s\"", link);
+				eprintf("%s\n", err_msg);
 			}
 		} else {
-			if (arg.profile) {
+			// -- LINK --
+			if (split.profile == NULL) {
 				eprintf("error: expected profile\n");
 				exit(EXIT_FAILURE);
 			}
@@ -174,9 +231,9 @@ int main(int argc, char **argv) {
 				printf("link: \"%s\" -> \"%s\"\n", profile, link);
 				continue;
 			}
-			const char *err_msg = dfg_link(profile, link);
+			err_msg = dfg_link(profile, link, option.force);
 			if (err_msg) {
-				eprintf("failed to link \"%s\" -> \"%s\"", profile, link);
+				eprintf("failed to link \"%s\" -> \"%s\"\n", profile, link);
 				eprintf("%s\n", err_msg);
 			}
 		}

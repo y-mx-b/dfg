@@ -11,9 +11,9 @@ void _path_join(size_t n, char *buf, ...);
 #define path_join(n, buf, ...) _path_join(n, buf, __VA_ARGS__, NULL);
 
 /// Link profile. Returns error message on failure or NULL on success.
-const char *dfg_link(const char *profile, const char *link);
+const char *dfg_link(const char *profile, const char *link, _Bool force);
 
-/// Link profile. Returns error message on failure or NULL on success.
-const char *dfg_unlink(const char *profile, const char *link);
+/// Unlink profile. Returns error message on failure or NULL on success.
+const char *dfg_unlink(const char *link);
 
 #endif
