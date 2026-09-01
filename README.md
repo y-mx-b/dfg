@@ -11,7 +11,7 @@ by keeping them all contained within a single directory.
 ```
 A dotfile configuration utility.
 
-usage: dfg [-hdfu] [-s <path>] [-r <root-path>] <profile|profile:link>...
+usage: dfg [-hdfu] [-s <store-path>] [-r <root-path>] <[profile]:[link]>...
 
 options:
     -h          Display usage information.

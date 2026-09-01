@@ -16,7 +16,7 @@ void eprintf(const char *restrict format, ...) {
 	va_end(args);
 }
 
-#define USAGE "usage: dfg [-hdfu] [-s <store-path>] [-r <root-path>] <profile|profile:link>..."
+#define USAGE "usage: dfg [-hdfu] [-s <store-path>] [-r <root-path>] <[profile]:[link]>..."
 #define HELP \
 	"A dotfile configuration utility.\n" \
 	"\n" \
