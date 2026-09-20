@@ -60,7 +60,7 @@ const char *dfg_link(const char *profile, const char *link, bool force) {
 	if (symlink(profile, link) == 0) { return NULL; }
 	if (force && errno == EEXIST) {
 		remove(link);
-		return dfg_link(profile, link, force);
+		return dfg_link(profile, link, false);
 	}
 	switch(errno) {
 	case EACCES:
