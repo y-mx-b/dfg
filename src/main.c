@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
 		}
 
 		if (option.help) {
-			printf(USAGE);
+			printf(HELP);
 			exit(EXIT_SUCCESS);
 		} else if (optind >= argc) {
 			eprintf("error: expected arguments\n");
